@@ -104,9 +104,11 @@ impl Renderer {
             mapped_at_creation: false,
         });
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Copy Encoder"),
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Copy Encoder"),
+            });
 
         encoder.copy_texture_to_buffer(
             wgpu::ImageCopyTexture {
@@ -133,7 +135,7 @@ impl Renderer {
         self.queue.submit(std::iter::once(encoder.finish()));
 
         let buffer_slice = buffer.slice(..);
-        
+
         // Use a simple blocking approach
         buffer_slice.map_async(wgpu::MapMode::Read, |_| {});
         self.device.poll(wgpu::Maintain::Wait);

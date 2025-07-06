@@ -38,11 +38,7 @@ impl Camera {
             self.near,
             self.far,
         );
-        let view = Mat4::look_at_rh(
-            self.position,
-            self.position + self.forward,
-            self.up,
-        );
+        let view = Mat4::look_at_rh(self.position, self.position + self.forward, self.up);
         proj * view
     }
 
@@ -77,7 +73,8 @@ impl Camera {
             yaw_rad.cos() * pitch_rad.cos(),
             pitch_rad.sin(),
             yaw_rad.sin() * pitch_rad.cos(),
-        ).normalize();
+        )
+        .normalize();
 
         self.right = self.forward.cross(Vec3::Y).normalize();
         self.up = self.right.cross(self.forward).normalize();

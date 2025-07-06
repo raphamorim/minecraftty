@@ -1,5 +1,5 @@
-use anyhow::Result;
 use crate::geometry::Vertex;
+use anyhow::Result;
 use image::GenericImageView;
 
 pub struct Material {
@@ -11,7 +11,11 @@ pub struct Material {
 }
 
 impl Material {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, uniform_buffer: &wgpu::Buffer) -> Result<Self> {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        uniform_buffer: &wgpu::Buffer,
+    ) -> Result<Self> {
         // Load texture
         let texture_bytes = include_bytes!("../textures/blocks.png");
         let texture_image = image::load_from_memory(texture_bytes)?;
@@ -99,11 +103,12 @@ impl Material {
             label: Some("texture_bind_group_layout"),
         });
 
-        let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
-        });
+        let render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
@@ -155,7 +160,11 @@ impl Material {
         })
     }
 
-    pub fn create_bind_group(&self, device: &wgpu::Device, uniform_buffer: &wgpu::Buffer) -> wgpu::BindGroup {
+    pub fn create_bind_group(
+        &self,
+        device: &wgpu::Device,
+        uniform_buffer: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &self.bind_group_layout,
             entries: &[

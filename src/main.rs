@@ -4,7 +4,7 @@ use crossterm::{
     terminal::{self, Clear, ClearType},
 };
 use glam::{Mat4, Vec2, Vec3};
-use std::io::{stdout, Write, BufWriter};
+use std::io::{stdout, BufWriter, Write};
 use wgpu::util::DeviceExt;
 
 mod camera;
@@ -59,19 +59,29 @@ struct MinecraftTTY {
 impl MinecraftTTY {
     async fn new() -> Result<Self> {
         let (terminal_width, terminal_height) = get_terminal_size();
-        let renderer = Renderer::new(terminal_width, terminal_height).await?;
-        
+
+        // Increase renderer resolution for more detail
+        // Each terminal character represents 2 vertical pixels, so multiply by 2 for height
+        // We can also increase width for more horizontal detail
+        let renderer_width = terminal_width * 2; // 2x horizontal resolution
+        let renderer_height = terminal_height * 2; // This gives us the 2:1 pixel ratio for ▀
+
+        let renderer = Renderer::new(renderer_width, renderer_height).await?;
+
         let camera = Camera::new(
-            terminal_width as f32 / terminal_height as f32,
+            renderer_width as f32 / renderer_height as f32,
             Vec3::new(4.0, 6.0, 4.0), // Position camera above and away from origin
         );
 
         let uniforms = Uniforms::new();
-        let uniform_buffer = renderer.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[uniforms]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+        let uniform_buffer =
+            renderer
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Uniform Buffer"),
+                    contents: bytemuck::cast_slice(&[uniforms]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
 
         let material = Material::new(&renderer.device, &renderer.queue, &uniform_buffer)?;
         let uniform_bind_group = material.create_bind_group(&renderer.device, &uniform_buffer);
@@ -81,7 +91,8 @@ impl MinecraftTTY {
         for x in 0..2 {
             for z in 0..2 {
                 let chunk_pos = Vec2::new(x as f32, z as f32);
-                let geometry = generate_chunk_geometry(&renderer.device, &renderer.queue, chunk_pos)?;
+                let geometry =
+                    generate_chunk_geometry(&renderer.device, &renderer.queue, chunk_pos)?;
                 geometries.push(geometry);
             }
         }
@@ -106,28 +117,26 @@ impl MinecraftTTY {
         match event::poll(std::time::Duration::from_millis(0)) {
             Ok(true) => {
                 match event::read() {
-                    Ok(Event::Key(KeyEvent { code, .. })) => {
-                        match code {
-                            KeyCode::Char('x') | KeyCode::Esc => return Ok(false),
-                            KeyCode::Char('w') | KeyCode::Up => self.camera.move_forward(0.5),
-                            KeyCode::Char('s') | KeyCode::Down => self.camera.move_forward(-0.5),
-                            KeyCode::Char('a') | KeyCode::Left => self.camera.move_right(-0.5),
-                            KeyCode::Char('d') | KeyCode::Right => self.camera.move_right(0.5),
-                            KeyCode::Char('q') => self.camera.move_up(-0.5),
-                            KeyCode::Char('e') => self.camera.move_up(0.5),
-                            KeyCode::Char('h') => self.camera.rotate_y(-10.0),
-                            KeyCode::Char('l') => self.camera.rotate_y(10.0),
-                            KeyCode::Char('j') => self.camera.rotate_x(10.0),
-                            KeyCode::Char('k') => self.camera.rotate_x(-10.0),
-                            _ => {}
-                        }
-                    }
-                    Ok(_) => {} // Other events
+                    Ok(Event::Key(KeyEvent { code, .. })) => match code {
+                        KeyCode::Char('x') | KeyCode::Esc => return Ok(false),
+                        KeyCode::Char('w') | KeyCode::Up => self.camera.move_forward(0.5),
+                        KeyCode::Char('s') | KeyCode::Down => self.camera.move_forward(-0.5),
+                        KeyCode::Char('a') | KeyCode::Left => self.camera.move_right(-0.5),
+                        KeyCode::Char('d') | KeyCode::Right => self.camera.move_right(0.5),
+                        KeyCode::Char('q') => self.camera.move_up(-0.5),
+                        KeyCode::Char('e') => self.camera.move_up(0.5),
+                        KeyCode::Char('h') => self.camera.rotate_y(-10.0),
+                        KeyCode::Char('l') => self.camera.rotate_y(10.0),
+                        KeyCode::Char('j') => self.camera.rotate_x(10.0),
+                        KeyCode::Char('k') => self.camera.rotate_x(-10.0),
+                        _ => {}
+                    },
+                    Ok(_) => {}  // Other events
                     Err(_) => {} // Ignore input errors
                 }
             }
             Ok(false) => {} // No input available
-            Err(_) => {} // Ignore polling errors
+            Err(_) => {}    // Ignore polling errors
         }
         Ok(true)
     }
@@ -142,9 +151,12 @@ impl MinecraftTTY {
         );
 
         // Render to texture
-        let mut encoder = self.renderer.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render Encoder"),
-        });
+        let mut encoder =
+            self.renderer
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder"),
+                });
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -179,12 +191,15 @@ impl MinecraftTTY {
 
             for geometry in &self.geometries {
                 render_pass.set_vertex_buffer(0, geometry.vertex_buffer.slice(..));
-                render_pass.set_index_buffer(geometry.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                render_pass
+                    .set_index_buffer(geometry.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..geometry.index_count, 0, 0..1);
             }
         }
 
-        self.renderer.queue.submit(std::iter::once(encoder.finish()));
+        self.renderer
+            .queue
+            .submit(std::iter::once(encoder.finish()));
 
         // Copy to CPU and display in terminal
         pollster::block_on(self.present_to_terminal())?;
@@ -194,13 +209,13 @@ impl MinecraftTTY {
 
     async fn present_to_terminal(&self) -> Result<()> {
         let pixels = self.renderer.read_pixels().await?;
-        
+
         // Use a buffered writer for better performance
         let mut stdout = std::io::BufWriter::new(std::io::stdout());
-        
+
         // Use synchronized update to prevent flickering
         write!(stdout, "\x1b[?2026h")?; // Begin synchronized update
-        
+
         // Move cursor to top-left (don't clear screen every frame)
         write!(stdout, "\x1b[H")?;
 
@@ -208,38 +223,75 @@ impl MinecraftTTY {
         let mut prev_color1: Option<[u8; 3]> = None;
         let mut prev_color2: Option<[u8; 3]> = None;
 
-        // Calculate how many terminal rows we need (each terminal row = 2 pixel rows)
-        let terminal_rows_needed = (self.renderer.height + 1) / 2;
-        
-        // Print the pixels using explicit cursor positioning to avoid line wrapping
-        let mut y = 0;
-        let mut terminal_row = 1;
-        
-        while y < self.renderer.height && terminal_row <= terminal_rows_needed {
+        // Now we need to sample from the higher resolution renderer
+        // Each terminal character covers 2x2 pixels in the renderer
+        for terminal_row in 0..self.terminal_height {
             // Move cursor to the beginning of this terminal row
-            write!(stdout, "\x1b[{};1H", terminal_row)?;
-            
-            let mut x = 0;
-            while x < self.renderer.width {
-                // Alpha channel is skipped - exactly like reference
-                
-                let j = ((y * self.renderer.width + x) * 4) as usize;
-                let c1 = if j + 2 < pixels.len() {
-                    [pixels[j], pixels[j + 1], pixels[j + 2]]
+            write!(stdout, "\x1b[{};1H", terminal_row + 1)?;
+
+            for terminal_col in 0..self.terminal_width {
+                // Sample 2x2 pixels from renderer for each terminal character
+                let renderer_x = terminal_col * 2;
+                let renderer_y = terminal_row * 2;
+
+                // Get top pixel (average of top 2 pixels)
+                let top_left_idx = ((renderer_y * self.renderer.width + renderer_x) * 4) as usize;
+                let top_right_idx =
+                    ((renderer_y * self.renderer.width + (renderer_x + 1)) * 4) as usize;
+
+                let c1 = if top_left_idx + 2 < pixels.len() && top_right_idx + 2 < pixels.len() {
+                    // Average the two top pixels
+                    [
+                        ((pixels[top_left_idx] as u16 + pixels[top_right_idx] as u16) / 2) as u8,
+                        ((pixels[top_left_idx + 1] as u16 + pixels[top_right_idx + 1] as u16) / 2)
+                            as u8,
+                        ((pixels[top_left_idx + 2] as u16 + pixels[top_right_idx + 2] as u16) / 2)
+                            as u8,
+                    ]
+                } else if top_left_idx + 2 < pixels.len() {
+                    [
+                        pixels[top_left_idx],
+                        pixels[top_left_idx + 1],
+                        pixels[top_left_idx + 2],
+                    ]
                 } else {
                     [0, 0, 0]
                 };
 
-                let j2 = (((y + 1) * self.renderer.width + x) * 4) as usize;
-                let c2 = if j2 + 2 < pixels.len() {
-                    [pixels[j2], pixels[j2 + 1], pixels[j2 + 2]]
+                // Get bottom pixel (average of bottom 2 pixels)
+                let bottom_left_idx =
+                    (((renderer_y + 1) * self.renderer.width + renderer_x) * 4) as usize;
+                let bottom_right_idx =
+                    (((renderer_y + 1) * self.renderer.width + (renderer_x + 1)) * 4) as usize;
+
+                let c2 = if bottom_left_idx + 2 < pixels.len()
+                    && bottom_right_idx + 2 < pixels.len()
+                {
+                    // Average the two bottom pixels
+                    [
+                        ((pixels[bottom_left_idx] as u16 + pixels[bottom_right_idx] as u16) / 2)
+                            as u8,
+                        ((pixels[bottom_left_idx + 1] as u16 + pixels[bottom_right_idx + 1] as u16)
+                            / 2) as u8,
+                        ((pixels[bottom_left_idx + 2] as u16 + pixels[bottom_right_idx + 2] as u16)
+                            / 2) as u8,
+                    ]
+                } else if bottom_left_idx + 2 < pixels.len() {
+                    [
+                        pixels[bottom_left_idx],
+                        pixels[bottom_left_idx + 1],
+                        pixels[bottom_left_idx + 2],
+                    ]
                 } else {
-                    [0, 0, 0]
+                    c1 // Use top color if bottom doesn't exist
                 };
 
-                if prev_color1.is_none() || prev_color1.unwrap() != c1 ||
-                   prev_color2.is_none() || prev_color2.unwrap() != c2 {
-                    // Exactly like reference: c1 = foreground, c2 = background
+                if prev_color1.is_none()
+                    || prev_color1.unwrap() != c1
+                    || prev_color2.is_none()
+                    || prev_color2.unwrap() != c2
+                {
+                    // c1 = foreground, c2 = background
                     write!(stdout, "\x1b[38;2;{};{};{}m", c1[0], c1[1], c1[2])?;
                     write!(stdout, "\x1b[48;2;{};{};{}m", c2[0], c2[1], c2[2])?;
 
@@ -248,17 +300,12 @@ impl MinecraftTTY {
                 }
 
                 write!(stdout, "▀")?;
-
-                x += 1;
             }
-
-            y += 2;
-            terminal_row += 1;
         }
 
         // End synchronized update
         write!(stdout, "\x1b[?2026l")?; // End synchronized update
-        
+
         stdout.flush()?;
         Ok(())
     }
@@ -272,11 +319,11 @@ impl MinecraftTTY {
             if !self.handle_input()? {
                 break Ok(());
             }
-            
+
             if let Err(e) = self.render() {
                 break Err(e);
             }
-            
+
             std::thread::sleep(std::time::Duration::from_millis(33)); // ~30 FPS instead of 60
         };
 
@@ -289,7 +336,7 @@ impl MinecraftTTY {
 
 fn main() -> Result<()> {
     env_logger::init();
-    
+
     pollster::block_on(async {
         let mut app = MinecraftTTY::new().await?;
         app.run()
