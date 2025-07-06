@@ -4,7 +4,6 @@ use glam::{Vec2, Vec3};
 use noise::{NoiseFn, Perlin};
 
 pub const CHUNK_SIZE: usize = 8;
-pub const CHUNK_HEIGHT: usize = 8;
 
 #[derive(Debug, Clone, Copy)]
 pub enum BlockType {

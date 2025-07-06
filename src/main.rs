@@ -1,10 +1,10 @@
 use anyhow::Result;
 use crossterm::{
     cursor, execute,
-    terminal::{self, Clear, ClearType},
+    terminal::{self},
 };
 use glam::{Mat4, Vec2, Vec3};
-use std::io::{stdout, BufWriter, Write};
+use std::io::{stdout, Write};
 use wgpu::util::DeviceExt;
 
 mod camera;
@@ -62,7 +62,6 @@ impl MinecraftTTY {
 
         // Increase renderer resolution for more detail
         // Each terminal character represents 2 vertical pixels, so multiply by 2 for height
-        // We can also increase width for more horizontal detail
         let renderer_width = terminal_width * 2; // 2x horizontal resolution
         let renderer_height = terminal_height * 2; // This gives us the 2:1 pixel ratio for ▀
 
@@ -324,7 +323,7 @@ impl MinecraftTTY {
                 break Err(e);
             }
 
-            std::thread::sleep(std::time::Duration::from_millis(33)); // ~30 FPS instead of 60
+            std::thread::sleep(std::time::Duration::from_millis(33)); // ~30 FPS
         };
 
         execute!(stdout(), cursor::Show, terminal::LeaveAlternateScreen)?;

@@ -5,7 +5,6 @@ use image::GenericImageView;
 pub struct Material {
     pub render_pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
-    pub texture: wgpu::Texture,
     pub texture_view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
 }
@@ -14,7 +13,7 @@ impl Material {
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        uniform_buffer: &wgpu::Buffer,
+        _uniform_buffer: &wgpu::Buffer,
     ) -> Result<Self> {
         // Load texture
         let texture_bytes = include_bytes!("../textures/blocks.png");
@@ -154,7 +153,6 @@ impl Material {
         Ok(Self {
             render_pipeline,
             bind_group_layout,
-            texture,
             texture_view,
             sampler,
         })

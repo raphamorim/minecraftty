@@ -5,7 +5,6 @@ pub struct Renderer {
     pub queue: wgpu::Queue,
     pub texture: wgpu::Texture,
     pub texture_view: wgpu::TextureView,
-    pub depth_texture: wgpu::Texture,
     pub depth_texture_view: wgpu::TextureView,
     pub width: u32,
     pub height: u32,
@@ -81,7 +80,6 @@ impl Renderer {
             queue,
             texture,
             texture_view,
-            depth_texture,
             depth_texture_view,
             width,
             height,
@@ -136,7 +134,6 @@ impl Renderer {
 
         let buffer_slice = buffer.slice(..);
 
-        // Use a simple blocking approach
         buffer_slice.map_async(wgpu::MapMode::Read, |_| {});
         self.device.poll(wgpu::Maintain::Wait);
 
