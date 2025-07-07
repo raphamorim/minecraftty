@@ -24,8 +24,8 @@ impl Camera {
             aspect,
             near: 0.1,
             far: 100.0,
-            pitch: -30.0, // Look down more to see terrain
-            yaw: -45.0,   // Look towards the chunks
+            pitch: 0.0,  // Start level
+            yaw: 0.0,    // Start facing forward
         };
         camera.update_vectors();
         camera

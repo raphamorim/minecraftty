@@ -1,9 +1,10 @@
 use crate::geometry::{Geometry, Vertex};
+use crate::perlin;
 use anyhow::Result;
 use glam::{Vec2, Vec3};
-use noise::{NoiseFn, Perlin};
 
 pub const CHUNK_SIZE: usize = 8;
+pub const CHUNK_HEIGHT: usize = 8;
 
 #[derive(Debug, Clone, Copy)]
 pub enum BlockType {
@@ -225,7 +226,6 @@ fn generate_chunk(chunk_pos: Vec2) -> Vec<Vec<Vec<Block>>> {
         0.0,
         chunk_pos.y * CHUNK_SIZE as f32,
     );
-    let perlin = Perlin::new(42);
 
     let mut chunk = Vec::with_capacity(CHUNK_SIZE);
 
@@ -233,24 +233,37 @@ fn generate_chunk(chunk_pos: Vec2) -> Vec<Vec<Vec<Block>>> {
         let mut layer = Vec::with_capacity(CHUNK_SIZE);
 
         for z in 0..CHUNK_SIZE {
-            let height_noise = perlin.get([
-                (x as f64 + actual_chunk_pos.x as f64) / 8.0,
-                (z as f64 + actual_chunk_pos.z as f64) / 8.0,
-            ]);
-            let height = ((height_noise + 1.0) * 2.0 + 3.0) as usize; // Height between 3-7
+            // Match height calculation exactly
+            let height_noise = perlin::noise3d(
+                ((x as f64) + 16.0) / 12.0,
+                0.0,
+                ((z as f64) + 12.0) / 8.0,
+            );
+            let height = (height_noise.abs() * 8.0 + CHUNK_HEIGHT as f64) as usize;
 
             let mut column = Vec::with_capacity(height);
 
             for y in 0..height {
                 let world_pos = actual_chunk_pos + Vec3::new(x as f32, y as f32, z as f32);
 
-                // Simple block type assignment
-                let block_type = if y == height - 1 {
-                    BlockType::Grass // Top layer is always grass
-                } else if y > height - 3 {
-                    BlockType::Dirt // Next 2 layers are dirt
+                // Match 3D noise-based block type determination exactly
+                let dirt_noise = perlin::noise3d(
+                    world_pos.x as f64 / 12.0,
+                    world_pos.y as f64 / 8.0,
+                    world_pos.z as f64 / 12.0,
+                );
+                let stone_noise = perlin::noise3d(
+                    (world_pos.x + 8.0) as f64 / 12.0,
+                    world_pos.y as f64 / 8.0,
+                    (world_pos.z + 8.0) as f64 / 12.0,
+                );
+
+                let block_type = if dirt_noise.abs() > 0.2 {
+                    BlockType::Dirt
+                } else if stone_noise.abs() > 0.2 {
+                    BlockType::Stone
                 } else {
-                    BlockType::Stone // Bottom layers are stone
+                    BlockType::Grass
                 };
 
                 column.push(Block {

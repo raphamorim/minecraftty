@@ -10,6 +10,7 @@ use wgpu::util::DeviceExt;
 mod camera;
 mod geometry;
 mod material;
+mod perlin;
 mod renderer;
 mod world_gen;
 
@@ -18,13 +19,6 @@ use geometry::Geometry;
 use material::Material;
 use renderer::Renderer;
 use world_gen::generate_chunk_geometry;
-
-fn get_terminal_size() -> (u32, u32) {
-    match terminal::size() {
-        Ok((cols, rows)) => (cols as u32, rows as u32),
-        Err(_) => (80, 24), // fallback
-    }
-}
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -58,18 +52,18 @@ struct MinecraftTTY {
 
 impl MinecraftTTY {
     async fn new() -> Result<Self> {
-        let (terminal_width, terminal_height) = get_terminal_size();
+        // Use fixed terminal size (100x60)
+        let (terminal_width, terminal_height) = (100, 60);
 
-        // Increase renderer resolution for more detail
-        // Each terminal character represents 2 vertical pixels, so multiply by 2 for height
-        let renderer_width = terminal_width * 2; // 2x horizontal resolution
-        let renderer_height = terminal_height * 2; // This gives us the 2:1 pixel ratio for ▀
+        // Renderer resolution matches terminal exactly
+        let renderer_width = terminal_width;
+        let renderer_height = terminal_height;
 
         let renderer = Renderer::new(renderer_width, renderer_height).await?;
 
         let camera = Camera::new(
             renderer_width as f32 / renderer_height as f32,
-            Vec3::new(4.0, 6.0, 4.0), // Position camera above and away from origin
+            Vec3::new(0.0, 10.0, 0.0), // Position camera at reference location
         );
 
         let uniforms = Uniforms::new();
@@ -85,15 +79,18 @@ impl MinecraftTTY {
         let material = Material::new(&renderer.device, &renderer.queue, &uniform_buffer)?;
         let uniform_bind_group = material.create_bind_group(&renderer.device, &uniform_buffer);
 
-        // Generate some chunks closer to origin
+        // Generate chunks like the reference implementation
         let mut geometries = Vec::new();
-        for x in 0..2 {
-            for z in 0..2 {
-                let chunk_pos = Vec2::new(x as f32, z as f32);
-                let geometry =
-                    generate_chunk_geometry(&renderer.device, &renderer.queue, chunk_pos)?;
-                geometries.push(geometry);
-            }
+        let chunk_positions = [
+            Vec2::new(0.0, 0.0),
+            Vec2::new(-1.0, 0.0),
+            Vec2::new(0.0, -1.0),
+            Vec2::new(-1.0, -1.0),
+        ];
+        for chunk_pos in chunk_positions {
+            let geometry =
+                generate_chunk_geometry(&renderer.device, &renderer.queue, chunk_pos)?;
+            geometries.push(geometry);
         }
 
         Ok(Self {
@@ -222,64 +219,36 @@ impl MinecraftTTY {
         let mut prev_color1: Option<[u8; 3]> = None;
         let mut prev_color2: Option<[u8; 3]> = None;
 
-        // Now we need to sample from the higher resolution renderer
-        // Each terminal character covers 2x2 pixels in the renderer
+        // Sample pixels for terminal rendering
+        // Each terminal character covers 1 pixel horizontally, 2 pixels vertically
         for terminal_row in 0..self.terminal_height {
             // Move cursor to the beginning of this terminal row
             write!(stdout, "\x1b[{};1H", terminal_row + 1)?;
 
             for terminal_col in 0..self.terminal_width {
-                // Sample 2x2 pixels from renderer for each terminal character
-                let renderer_x = terminal_col * 2;
+                // Sample 2 vertical pixels for each terminal character
+                let renderer_x = terminal_col;
                 let renderer_y = terminal_row * 2;
 
-                // Get top pixel (average of top 2 pixels)
-                let top_left_idx = ((renderer_y * self.renderer.width + renderer_x) * 4) as usize;
-                let top_right_idx =
-                    ((renderer_y * self.renderer.width + (renderer_x + 1)) * 4) as usize;
-
-                let c1 = if top_left_idx + 2 < pixels.len() && top_right_idx + 2 < pixels.len() {
-                    // Average the two top pixels
+                // Get top pixel
+                let top_idx = ((renderer_y * self.renderer.width + renderer_x) * 4) as usize;
+                let c1 = if top_idx + 2 < pixels.len() {
                     [
-                        ((pixels[top_left_idx] as u16 + pixels[top_right_idx] as u16) / 2) as u8,
-                        ((pixels[top_left_idx + 1] as u16 + pixels[top_right_idx + 1] as u16) / 2)
-                            as u8,
-                        ((pixels[top_left_idx + 2] as u16 + pixels[top_right_idx + 2] as u16) / 2)
-                            as u8,
-                    ]
-                } else if top_left_idx + 2 < pixels.len() {
-                    [
-                        pixels[top_left_idx],
-                        pixels[top_left_idx + 1],
-                        pixels[top_left_idx + 2],
+                        pixels[top_idx],
+                        pixels[top_idx + 1],
+                        pixels[top_idx + 2],
                     ]
                 } else {
                     [0, 0, 0]
                 };
 
-                // Get bottom pixel (average of bottom 2 pixels)
-                let bottom_left_idx =
-                    (((renderer_y + 1) * self.renderer.width + renderer_x) * 4) as usize;
-                let bottom_right_idx =
-                    (((renderer_y + 1) * self.renderer.width + (renderer_x + 1)) * 4) as usize;
-
-                let c2 = if bottom_left_idx + 2 < pixels.len()
-                    && bottom_right_idx + 2 < pixels.len()
-                {
-                    // Average the two bottom pixels
+                // Get bottom pixel
+                let bottom_idx = (((renderer_y + 1) * self.renderer.width + renderer_x) * 4) as usize;
+                let c2 = if bottom_idx + 2 < pixels.len() {
                     [
-                        ((pixels[bottom_left_idx] as u16 + pixels[bottom_right_idx] as u16) / 2)
-                            as u8,
-                        ((pixels[bottom_left_idx + 1] as u16 + pixels[bottom_right_idx + 1] as u16)
-                            / 2) as u8,
-                        ((pixels[bottom_left_idx + 2] as u16 + pixels[bottom_right_idx + 2] as u16)
-                            / 2) as u8,
-                    ]
-                } else if bottom_left_idx + 2 < pixels.len() {
-                    [
-                        pixels[bottom_left_idx],
-                        pixels[bottom_left_idx + 1],
-                        pixels[bottom_left_idx + 2],
+                        pixels[bottom_idx],
+                        pixels[bottom_idx + 1],
+                        pixels[bottom_idx + 2],
                     ]
                 } else {
                     c1 // Use top color if bottom doesn't exist
